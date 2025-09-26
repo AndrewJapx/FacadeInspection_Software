@@ -1,0 +1,80 @@
+{
+  "defects": {
+    "Corrosion": {
+      "severity": "Medium",
+      "description": "Defect from Metal Panel material",
+      "source_material": "Metal Panel"
+    },
+    "Loose Panel": {
+      "severity": "Medium",
+      "description": "Defect from Metal Panel material",
+      "source_material": "Metal Panel"
+    },
+    "Denting": {
+      "severity": "Medium",
+      "description": "Defect from Metal Panel material",
+      "source_material": "Metal Panel"
+    },
+    "cracks": {
+      "description": "Defect from Stone material",
+      "severity": "Medium",
+      "source_material": "Stone"
+    },
+    "crack": {
+      "description": "Defect from Stone material",
+      "severity": "Medium",
+      "source_material": "Stone"
+    }
+  },
+  "materials": {
+    "Metal Panel": {
+      "defects": [
+        "Corrosion",
+        "Loose Panel",
+        "Denting"
+      ],
+      "description": "Metal cladding panels and related components"
+    },
+    "Stone": {
+      "defects": [
+        "cracks",
+        "crack"
+      ],
+      "description": "Natural stone materials including granite, limestone, marble, etc."
+    },
+    "Window": {
+      "defects": [],
+      "description": "Window systems including frames, glass, and sealing components"
+    }
+  },
+  "statuses": {
+    "Completed Before Last Week": {
+      "color": "#ef5350",
+      "description": "Work completed before last week"
+    },
+    "Completed Last Week": {
+      "color": "#43a047",
+      "description": "Work completed within the last week"
+    },
+    "For Verification": {
+      "color": "#ff9800",
+      "description": "Requires verification of completion"
+    },
+    "Pre-con": {
+      "color": "#1976d2",
+      "description": "Pre-construction phase item"
+    },
+    "Require Repair": {
+      "color": "#ffe082",
+      "description": "Needs repair but not urgent"
+    },
+    "Unsafe": {
+      "color": "#d32f2f",
+      "description": "Immediate safety concern requiring urgent attention"
+    },
+    "Verified": {
+      "color": "#81d4fa",
+      "description": "Work completed and verified"
+    }
+  }
+}

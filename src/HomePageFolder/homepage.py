@@ -58,16 +58,25 @@ class NewProjectDialog(QDialog):
         super().accept()
 
 class NavBar(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, homepage_parent=None):
+        super().__init__()
+        self.homepage_parent = homepage_parent
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(20)
         layout.addStretch(1)
         for name in ["Projects", "People", "Account", "Templates", "Integrations"]:
             btn = QPushButton(name)
+            if name == "Templates" and homepage_parent:
+                btn.clicked.connect(self.show_templates)
             layout.addWidget(btn)
         layout.addStretch(1)
+    
+    def show_templates(self):
+        if self.homepage_parent:
+            main_window = self.homepage_parent.window()
+            if hasattr(main_window, 'show_templates'):
+                main_window.show_templates()
 
 class HomePage(QWidget):
     def __init__(self, parent=None):
@@ -87,7 +96,7 @@ class HomePage(QWidget):
         header_layout.addWidget(logo_label)
 
         # Center: NavBar widget (centered)
-        nav_bar = NavBar()
+        nav_bar = NavBar(self)
         header_layout.addStretch(1)
         header_layout.addWidget(nav_bar, alignment=Qt.AlignCenter)
         header_layout.addStretch(1)

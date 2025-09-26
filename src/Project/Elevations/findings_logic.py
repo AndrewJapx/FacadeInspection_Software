@@ -110,11 +110,10 @@ def create_pin(pin_data, elevation_name=None, project_name=None):
     return pin
 
 # --- Pin to Finding Linking ---
-def add_pin_to_master_findings(pin, elevation_name=None, project_name=None):
+def add_pin_to_project_findings(pin, elevation_name=None, project_name=None):
     """
-    Abstracts all info from a pin and adds it to the master findings list.
+    Abstracts all info from a pin and adds it to the project-specific findings.json.
     Optionally sets the elevation name.
-    Automatically saves the master findings list after adding.
     Also links the finding to the pin by storing pin_id in the finding and finding_id in the pin.
     Requires project_name to store pins in the correct folder.
     Raises ValueError if project_name is None.
@@ -138,7 +137,7 @@ def add_pin_to_master_findings(pin, elevation_name=None, project_name=None):
     except ImportError:
         pos_x, pos_y = pin_pos.get("x", 0), pin_pos.get("y", 0)
     
-    # Check for existing pin at same location
+    # Check for existing pin at same location and elevation
     for existing_pin in pins:
         existing_pos = existing_pin.get("pos")
         existing_elevation = existing_pin.get("elevation")
@@ -161,28 +160,54 @@ def add_pin_to_master_findings(pin, elevation_name=None, project_name=None):
                     'chat': pin.get('chat', existing_pin.get('chat', []))
                 })
                 save_pins(pins, project_name)
+                print(f"[INFO] Updated existing pin at ({pos_x:.3f}, {pos_y:.3f}) in {current_elevation}")
                 return existing_pin.get("finding_id")
         except (AttributeError, TypeError):
             continue
     
-    # No duplicate found, create new pin
+    # No duplicate found, create new pin if it doesn't have pin_id
     if "pin_id" not in pin:
         pin = create_pin(pin, elevation_name, project_name)
+        print(f"[INFO] Created new pin with ID {pin['pin_id']}")
+    
+    # Prepare pin data for finding creation
     pin_data = pin.copy()
     if elevation_name:
         pin_data['elevation'] = elevation_name
-    # Add finding and link pin_id
-    finding = add_finding_from_pin(pin_data)
+        pin['elevation'] = elevation_name  # Also set it in the original pin
+    
+    # Add to project-specific findings
+    from Project.project_findings import add_finding_to_project
+    finding = add_finding_to_project(project_name, pin_data)
     finding_id = finding.get("id")
+    
+    # Update the pin with the finding_id
     pin["finding_id"] = finding_id
-    # Save updated pin with finding_id
+    
+    # Reload pins and update the specific pin with finding_id
     pins = load_pins(project_name)
+    pin_updated = False
     for p in pins:
         if p.get("pin_id") == pin["pin_id"]:
             p["finding_id"] = finding_id
+            pin_updated = True
+            break
+    
+    if not pin_updated:
+        # Pin not found in list, add it
+        pins.append(pin)
+        print(f"[INFO] Added pin {pin['pin_id']} to pins list")
+    
+    # Save the updated pins
     save_pins(pins, project_name)
-    save_master_findings()
+    
+    print(f"[INFO] Linked pin {pin['pin_id']} to finding {finding_id} in project {project_name}")
     return finding
+
+# Keep the old function name for backward compatibility, but redirect to new function
+def add_pin_to_master_findings(pin, elevation_name=None, project_name=None):
+    """Legacy function name - redirects to add_pin_to_project_findings"""
+    return add_pin_to_project_findings(pin, elevation_name, project_name)
 
 # --- Explanation ---
 # This module:

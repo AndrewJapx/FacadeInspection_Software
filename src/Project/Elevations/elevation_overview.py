@@ -1,5 +1,6 @@
 from json import tool
 from config.status import STATUS_COLORS
+from Templates.template_loader import get_template_loader, load_default_template_if_needed
 from PySide6.QtCore import Signal, QPointF, Qt, QPoint, QSize, QRect, QLineF
 from PySide6.QtWidgets import (
     QDialog, QLineEdit, QTextEdit, QComboBox, QDialogButtonBox, QFormLayout,
@@ -11,6 +12,7 @@ import fitz  # PyMuPDF
 from Project.Elevations.finding_card import FindingCard
 from Project.Elevations.findings_logic import add_pin_to_master_findings
 from Project.master_findings import add_finding_from_pin
+from Project.Elevations.chat_data_manager import ChatDataManager
 
 from PySide6.QtCore import Signal
 
@@ -24,6 +26,12 @@ class ElevationOverviewWidget(QWidget):
         self.pdf_path = pdf_path
         self.project_name = project_name  # Store project name for pin persistence
         self.elevation_name = elevation_name  # Store elevation name for proper pin filtering
+        
+        # Initialize chat data manager
+        if self.project_name:
+            self.chat_manager = ChatDataManager(self.project_name)
+        else:
+            self.chat_manager = None
         # --- Load pins from pins.json using findings_logic ---
         try:
             from Project.Elevations.findings_logic import load_pins
@@ -84,6 +92,12 @@ class ElevationOverviewWidget(QWidget):
             
             self.findings = filtered_pins  # Load findings from stored pins
             print(f"[DEBUG] Final filtered findings: {[pin.get('name') for pin in self.findings]}")
+            
+            # If no pins match elevation filtering, show all pins for debugging (in development)
+            if len(filtered_pins) == 0 and len(all_pins) > 0:
+                print(f"[DEBUG] No pins matched elevation filter, showing all {len(all_pins)} pins for debugging")
+                self.findings = all_pins  # Show all pins for debugging
+                
         except Exception as e:
             print(f"[ERROR] Failed to load pins: {e}")
             self.findings = []
@@ -114,7 +128,7 @@ class ElevationOverviewWidget(QWidget):
         main_layout.addWidget(self.toolbar)
 
         # --- Center: PDF Viewer with pin/draw overlay ---
-        self.pdf_viewer = PDFPinViewer(self.pdf_path)
+        self.pdf_viewer = PDFPinViewer(self.pdf_path, chat_manager=self.chat_manager)
         self.pdf_viewer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.pdf_viewer.pin_created.connect(self.on_pin_created)
         self.pdf_viewer.pin_updated.connect(self.on_pin_updated)
@@ -155,6 +169,13 @@ class ElevationOverviewWidget(QWidget):
 
         self.finding_cards = []
         self.findings_layout = findings_layout  # Save for later use
+        
+        # Add View Photos button
+        self.photos_btn = QPushButton("📷 View Photos")
+        self.photos_btn.setStyleSheet("background: #4CAF50; color: white; border-radius: 6px; padding: 8px; font-weight: bold; margin-bottom: 4px;")
+        self.photos_btn.clicked.connect(self.show_elevation_photos)
+        findings_layout.addWidget(self.photos_btn)
+        
         self.add_btn = QPushButton("+ New Task")
         self.add_btn.setStyleSheet("background: #e3e3e3; border-radius: 6px; padding: 8px; font-weight: bold;")
         findings_layout.addStretch(1)
@@ -212,6 +233,12 @@ class ElevationOverviewWidget(QWidget):
                     filtered_pins.append(pin)
             
             self.findings = filtered_pins
+            
+            # If no pins match elevation filtering, show all pins for debugging (in development)
+            if len(filtered_pins) == 0 and len(all_pins) > 0:
+                print(f"[DEBUG] No pins matched elevation filter during reload, showing all {len(all_pins)} pins for debugging")
+                self.findings = all_pins  # Show all pins for debugging
+                
             self.refresh_findings_sidebar()
             print(f"[DEBUG] Reloaded {len(self.findings)} findings")
         except Exception as e:
@@ -241,7 +268,7 @@ class ElevationOverviewWidget(QWidget):
     def _make_finding_card_click_handler(self, finding):
         def handler(event):
             # Only open dialog for editing existing finding, not for new pin creation
-            dlg = PinTaskDialog(finding, new_pin=False, pdf_path=self.pdf_path, findings=self.findings)
+            dlg = PinTaskDialog(finding, new_pin=False, pdf_path=self.pdf_path, findings=self.findings, chat_manager=self.chat_manager)
             result = dlg.exec()
             if result == QDialog.Accepted:
                 finding['chat'] = dlg.get_chat()
@@ -268,6 +295,12 @@ class ElevationOverviewWidget(QWidget):
         import os
         # Use provided elevation_name if available, otherwise fall back to PDF basename
         elevation_name = self.elevation_name if self.elevation_name else (os.path.basename(self.pdf_path) if self.pdf_path else "Unknown Elevation")
+        print(f"[DEBUG] Using elevation_name: '{elevation_name}' for pin: '{pin.get('name', 'No name')}'")
+        print(f"[DEBUG] Project name: '{self.project_name}'")
+        
+        # Ensure pin has elevation field set before saving
+        pin['elevation'] = elevation_name
+        
         # Add pin to master findings and storage
         add_pin_to_master_findings(pin, elevation_name=elevation_name, project_name=self.project_name)
         
@@ -332,16 +365,49 @@ class ElevationOverviewWidget(QWidget):
         self.toolbar.pan_btn.setChecked(tool == 'pan')
         self.pdf_viewer.set_mode(tool)
         self.toolbar.tool_selected.emit(tool)
+    
+    def show_elevation_photos(self):
+        """Show photo gallery filtered for this elevation"""
+        from Project.Photos.Photo_finding import PhotoGalleryWidget
+        from PySide6.QtWidgets import QDialog, QVBoxLayout
+        
+        # Create a dialog to show the photo gallery
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Photos - {self.elevation_name or 'Current Elevation'}")
+        dialog.setModal(True)
+        dialog.resize(900, 600)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Create photo gallery widget
+        photo_gallery = PhotoGalleryWidget(project_name=self.project_name)
+        layout.addWidget(photo_gallery)
+        
+        # Filter to show only this elevation's photos
+        if self.elevation_name:
+            # Wait for photos to load, then apply filter
+            def apply_elevation_filter():
+                for i in range(photo_gallery.elevation_filter.count()):
+                    if photo_gallery.elevation_filter.itemText(i) == self.elevation_name:
+                        photo_gallery.elevation_filter.setCurrentIndex(i)
+                        break
+            
+            # Apply filter after a short delay to ensure photos are loaded
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(100, apply_elevation_filter)
+        
+        dialog.exec()
 
 class PDFPinViewer(QLabel):
     from PySide6.QtCore import Signal
     pin_created = Signal(dict)  # Emitted when a new pin is created
     pin_updated = Signal(dict)  # Emitted when a pin is updated
-    def __init__(self, pdf_path=None, parent=None):
+    def __init__(self, pdf_path=None, parent=None, chat_manager=None):
         super().__init__(parent)
         self.setAlignment(Qt.AlignCenter)
         self.setStyleSheet("background: #eee; border: 1px solid #bbb; font-size: 18px;")
         self.pdf_path = pdf_path
+        self.chat_manager = chat_manager
         self.pins = []
         self.shapes = []  # List of dicts: {type, start, end}
         self.current_shape = None
@@ -413,7 +479,7 @@ class PDFPinViewer(QLabel):
                 px = pin['pos'].x() * self.base_pixmap.width()
                 py = pin['pos'].y() * self.base_pixmap.height()
                 if (QPointF(px, py) - QPointF(x, y)).manhattanLength() < 18:
-                    self.open_pin_dialog(pin)
+                    self.open_pin_dialog(pin, new_pin=False)
                     return
             return
         if self.mode == 'pin' and event.button() == Qt.LeftButton:
@@ -421,7 +487,7 @@ class PDFPinViewer(QLabel):
                 px = pin['pos'].x() * self.base_pixmap.width()
                 py = pin['pos'].y() * self.base_pixmap.height()
                 if (QPointF(px, py) - QPointF(x, y)).manhattanLength() < 18:
-                    self.open_pin_dialog(pin)
+                    self.open_pin_dialog(pin, new_pin=False)
                     return
             if self.point_in_pixmap(event.pos()):
                 # Start drag-to-place for new pin
@@ -457,7 +523,7 @@ class PDFPinViewer(QLabel):
 
     def open_pin_dialog(self, pin, new_pin=False):
         print(f"[DEBUG] open_pin_dialog called, new_pin={new_pin}")
-        dlg = PinTaskDialog(pin, new_pin=new_pin, pdf_path=self.pdf_path)
+        dlg = PinTaskDialog(pin, new_pin=new_pin, pdf_path=self.pdf_path, chat_manager=self.chat_manager)
         result = dlg.exec()
         print(f"[DEBUG] PinTaskDialog exec result: {result}")
         if result == QDialog.Accepted:
@@ -671,51 +737,51 @@ class PDFPinViewer(QLabel):
 # --- Pin Task Dialog with Chat ---
 
 class PinTaskDialog(QDialog):
-    def __init__(self, pin=None, new_pin=False, pdf_path=None, findings=None, parent=None):
+    def __init__(self, pin=None, new_pin=False, pdf_path=None, findings=None, parent=None, chat_manager=None):
         print(f"[DEBUG] PinTaskDialog __init__ called, pin: {pin}, new_pin: {new_pin}")
-    def open_pin_dialog(self, pin, new_pin=False):
-        print(f"[DEBUG] open_pin_dialog called, new_pin={new_pin}, pin before dialog: {pin}")
-        dlg = PinTaskDialog(pin, new_pin=new_pin, pdf_path=self.pdf_path)
-        result = dlg.exec()
-        print(f"[DEBUG] PinTaskDialog exec result: {result}")
-        if result == QDialog.Accepted:
-            pin['chat'] = dlg.get_chat()
-            pin['name'] = dlg.get_name()
-            pin['status'] = dlg.get_status()
-            pin['category'] = dlg.get_category()
-            print(f"[DEBUG] PinTaskDialog accepted, pin after dialog: {pin}")
-            self.pin_updated.emit(pin)
-            self.update()
-            return True
-        print("[DEBUG] PinTaskDialog cancelled or closed")
-        return False
-    def on_pin_created(self, pin):
-        print("[DEBUG] on_pin_created called with:", pin)
-        # Add pin info to findings list (model)
-        import os
-        elevation_name = os.path.basename(self.pdf_path) if self.pdf_path else "Unknown Elevation"
-        info = {
-            'name': pin.get('name', ''),
-            'pos': pin['pos'],
-            'status': pin.get('status', ''),
-            'material': pin.get('material', ''),
-            'defect': pin.get('defect', ''),
-            'chat': pin.get('chat', []),
-            'elevation_name': elevation_name
-        }
-        self.findings.append(info)
-        add_finding_from_pin(pin)  # <-- Add pin to master_findings
-        self.refresh_findings_sidebar()
-        self.finding_added.emit()  # Notify listeners to refresh sidebar
-        # After adding a pin, set tool to mouse and update toolbar button states
-        self.select_tool('mouse')
-    def __init__(self, pin=None, new_pin=False, pdf_path=None, findings=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Pin Details")
         self.pin = pin or {}
         self.new_pin = new_pin
         self.pdf_path = pdf_path
         self.findings = findings or []
+        self.chat_manager = chat_manager
+
+        # Load existing chat data if available
+        pin_id = self.pin.get('pin_id')
+        if pin_id and self.chat_manager:
+            self.existing_chat = self.chat_manager.load_pin_chat(pin_id)
+        else:
+            # Fallback to old chat format in pin data
+            self.existing_chat = self.pin.get('chat', [])
+
+        # For new pins, generate a temporary pin_id immediately so photos can be attached
+        if self.new_pin and not pin_id and self.chat_manager:
+            # Get next available pin_id using the same logic as findings_logic
+            import os
+            import json
+            pins_file = os.path.join(self.chat_manager.project_dir, 'pins.json')
+            if os.path.exists(pins_file):
+                try:
+                    with open(pins_file, 'r', encoding='utf-8') as f:
+                        existing_pins = json.load(f)
+                    next_id = max([p.get('pin_id', 0) for p in existing_pins], default=100) + 1
+                except:
+                    next_id = 101  # First pin if file corrupted
+            else:
+                next_id = 101  # First pin
+            
+            # Use the standard next ID - concurrent dialogs are rare in single-user application
+            
+            self.pin['pin_id'] = next_id
+            pin_id = next_id
+            print(f"[DEBUG] Assigned temporary pin_id {pin_id} to new pin")
+        
+        if pin_id and self.chat_manager:
+            self.existing_chat = self.chat_manager.load_pin_chat(pin_id)
+        else:
+            # Fallback to old chat format in pin data
+            self.existing_chat = self.pin.get('chat', [])
 
         self.resize(600, 500)  # Make the popup larger (width, height)
         main_layout = QVBoxLayout(self)
@@ -735,18 +801,44 @@ class PinTaskDialog(QDialog):
         from Project.Elevations.chat_item_widget import ChatItemWidget
         self.chat_log = QListWidget()
         self.chat_log.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        for msg in self.pin.get('chat', []):
+        
+        # Load chat messages from chat manager or fallback to pin data
+        from datetime import datetime
+        for msg in self.existing_chat:
             if isinstance(msg, dict) and msg.get('type') == 'photo':
-                widget = ChatItemWidget(image_path=msg['path'], date=msg.get('date'))
+                # Convert date string to datetime object
+                date_obj = None
+                date_str = msg.get('date')
+                if date_str:
+                    try:
+                        date_obj = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+                    except ValueError:
+                        try:
+                            # Try ISO format as fallback
+                            date_obj = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                        except:
+                            date_obj = None
+                widget = ChatItemWidget(image_path=msg['path'], date=date_obj)
                 item = QListWidgetItem()
                 item.setSizeHint(widget.sizeHint())
                 self.chat_log.addItem(item)
                 self.chat_log.setItemWidget(item, widget)
             else:
                 # Assume text message
-                date = msg['date'] if isinstance(msg, dict) and 'date' in msg else None
-                text = msg['text'] if isinstance(msg, dict) and 'text' in msg else str(msg)
-                widget = ChatItemWidget(text=text, date=date)
+                date_obj = None
+                if isinstance(msg, dict) and 'date' in msg:
+                    date_str = msg.get('date')
+                    if date_str:
+                        try:
+                            date_obj = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+                        except ValueError:
+                            try:
+                                # Try ISO format as fallback
+                                date_obj = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                            except:
+                                date_obj = None
+                text = msg.get('text') if isinstance(msg, dict) and 'text' in msg else str(msg)
+                widget = ChatItemWidget(text=text, date=date_obj)
                 item = QListWidgetItem()
                 item.setSizeHint(widget.sizeHint())
                 self.chat_log.addItem(item)
@@ -773,19 +865,38 @@ class PinTaskDialog(QDialog):
         attr_layout.addWidget(status_label)
         from PySide6.QtGui import QColor
         self.status_combo = QComboBox()
-        status_options = [
-            "Unsafe",
-            "Pre-con",
-            "Require Repair",
-            "Completed Before Last Week",
-            "For Verification",
-            "Completed Last Week",
-            "Verified"
-        ]
+        
+        # Load template if available
+        template_loader = get_template_loader()
+        if not template_loader.current_template:
+            load_default_template_if_needed()
+        
+        # Get status options from template
+        status_options = template_loader.get_status_options_for_pin_dialog()
+        if not status_options:
+            # Fallback to master list, then hardcoded options
+            master_data = template_loader.load_master_list()
+            status_options = list(master_data.get('statuses', {}).keys())
+            if not status_options:
+                status_options = [
+                    "Unsafe",
+                    "Pre-con", 
+                    "Require Repair",
+                    "Completed Before Last Week",
+                    "For Verification",
+                    "Completed Last Week",
+                    "Verified"
+                ]
+        
         self.status_combo.addItem("")
         for status in status_options:
             # Create a colored circle icon
-            color = STATUS_COLORS.get(status, "#cccccc")
+            # Try template colors first, then master list, then fallback to STATUS_COLORS
+            template_colors = template_loader.get_status_colors_dict()
+            color = template_colors.get(status)
+            if not color:
+                master_colors = template_loader.get_master_list_statuses()
+                color = master_colors.get(status) or STATUS_COLORS.get(status, "#cccccc")
             pixmap = QPixmap(16, 16)
             pixmap.fill(Qt.transparent)
             painter = QPainter(pixmap)
@@ -805,12 +916,21 @@ class PinTaskDialog(QDialog):
         attr_layout.addWidget(material_label)
         self.material_combo = QComboBox()
         self.material_combo.addItem("")
-        try:
-            from config.categories import CATEGORY_OPTIONS
-        except ImportError:
-            CATEGORY_OPTIONS = {}
-        self.CATEGORY_OPTIONS = CATEGORY_OPTIONS
-        for material in CATEGORY_OPTIONS.keys():
+        
+        # Get category options from template
+        template_category_options = template_loader.get_category_options_for_pin_dialog()
+        if not template_category_options:
+            # Fallback to master list, then config file
+            template_category_options = template_loader.get_master_list_categories()
+            if not template_category_options:
+                try:
+                    from config.categories import CATEGORY_OPTIONS
+                    template_category_options = CATEGORY_OPTIONS
+                except ImportError:
+                    template_category_options = {}
+        
+        self.CATEGORY_OPTIONS = template_category_options
+        for material in template_category_options.keys():
             self.material_combo.addItem(material)
         if self.pin.get('material'):
             idx = self.material_combo.findText(self.pin['material'])
@@ -824,7 +944,7 @@ class PinTaskDialog(QDialog):
         self.defect_combo = QComboBox()
         self.defect_combo.addItem("")
         if self.pin.get('material'):
-            defects = CATEGORY_OPTIONS.get(self.pin['material'], [])
+            defects = template_category_options.get(self.pin['material'], [])
             self.defect_combo.addItems(defects)
             if self.pin.get('defect'):
                 idx = self.defect_combo.findText(self.pin['defect'])
@@ -843,6 +963,16 @@ class PinTaskDialog(QDialog):
         attr_layout.addStretch(1)
         content_layout.addLayout(attr_layout, 1)
         main_layout.addLayout(content_layout, 1)
+
+        # Photo gallery button (only if pin has ID and photos exist)
+        pin_id = self.pin.get('pin_id')
+        if pin_id and self.chat_manager:
+            pin_photos = [msg for msg in self.existing_chat if msg.get('type') == 'photo']
+            if pin_photos:
+                photos_btn = QPushButton(f"📷 View Pin Photos ({len(pin_photos)})")
+                photos_btn.setStyleSheet("background: #4CAF50; color: white; border-radius: 4px; padding: 8px; font-weight: bold; margin: 4px;")
+                photos_btn.clicked.connect(self.show_pin_photos)
+                main_layout.addWidget(photos_btn)
 
         # Buttons
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -877,16 +1007,34 @@ class PinTaskDialog(QDialog):
         self.defect_combo.addItems(defects)
 
     def attach_photo(self):
-        from PySide6.QtWidgets import QFileDialog, QListWidgetItem
+        from PySide6.QtWidgets import QFileDialog, QListWidgetItem, QMessageBox
         from Project.Elevations.chat_item_widget import ChatItemWidget
         import datetime
         file_path, _ = QFileDialog.getOpenFileName(self, "Select Photo", "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)")
         if file_path:
-            widget = ChatItemWidget(image_path=file_path, date=datetime.datetime.now())
-            item = QListWidgetItem()
-            item.setSizeHint(widget.sizeHint())
-            self.chat_log.addItem(item)
-            self.chat_log.setItemWidget(item, widget)
+            pin_id = self.pin.get('pin_id')
+            print(f"[DEBUG] attach_photo: pin_id={pin_id}, chat_manager={self.chat_manager is not None}")
+            
+            # Save photo using chat manager if available
+            if pin_id and self.chat_manager:
+                saved_path = self.chat_manager.add_photo_message(pin_id, file_path)
+                if saved_path:
+                    # Use the saved path for the widget
+                    widget = ChatItemWidget(image_path=saved_path, date=datetime.datetime.now())
+                    item = QListWidgetItem()
+                    item.setSizeHint(widget.sizeHint())
+                    self.chat_log.addItem(item)
+                    self.chat_log.setItemWidget(item, widget)
+                    
+                    # Update existing_chat to reflect the new photo
+                    self.existing_chat = self.chat_manager.load_pin_chat(pin_id)
+                    print(f"[DEBUG] Photo attached successfully to pin {pin_id}")
+                else:
+                    QMessageBox.warning(self, "Photo Error", "Failed to save photo. Please try again.")
+            else:
+                # This should not happen for new pins anymore since they get pin_id
+                QMessageBox.warning(self, "Photo Error", "Cannot attach photo: Pin ID not available. Please save the pin first.")
+                print(f"[ERROR] attach_photo failed: pin_id={pin_id}, chat_manager available={self.chat_manager is not None}")
 
     def update_mini_map(self):
         # Show a small version of the PDF with a pin icon at the correct location
@@ -959,28 +1107,91 @@ class PinTaskDialog(QDialog):
         return self.defect_combo.currentText()
 
     def get_chat(self):
-        # Return all chat messages as a list, including photo paths
-        chat = []
-        for i in range(self.chat_log.count()):
-            item = self.chat_log.item(i)
-            if item.icon().isNull():
-                chat.append(item.text())
-            else:
-                # Store as a tuple or special string for photo
-                chat.append(item.text())
-        return chat
+        # Return chat messages - now handled by chat manager, so return existing chat
+        pin_id = self.pin.get('pin_id')
+        if pin_id and self.chat_manager:
+            return self.chat_manager.load_pin_chat(pin_id)
+        else:
+            # Fallback to existing chat in pin data
+            return self.pin.get('chat', [])
 
     def add_chat_message(self):
         from Project.Elevations.chat_item_widget import ChatItemWidget
         import datetime
         msg = self.chat_input.text().strip()
         if msg:
+            # Add to UI
             widget = ChatItemWidget(text=msg, date=datetime.datetime.now())
             item = QListWidgetItem()
             item.setSizeHint(widget.sizeHint())
             self.chat_log.addItem(item)
             self.chat_log.setItemWidget(item, widget)
             self.chat_input.clear()
+            
+            # Save to chat manager if available
+            pin_id = self.pin.get('pin_id')
+            if pin_id and self.chat_manager:
+                self.chat_manager.add_text_message(pin_id, msg)
+
+    def show_pin_photos(self):
+        """Show photo gallery focused on this specific pin"""
+        from Project.Photos.Photo_finding import PhotoDetailDialog
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QWidget
+        
+        pin_id = self.pin.get('pin_id')
+        if not pin_id or not self.chat_manager:
+            return
+        
+        # Get pin photos
+        pin_photos = [msg for msg in self.existing_chat if msg.get('type') == 'photo']
+        if not pin_photos:
+            return
+        
+        # Create dialog to show pin photos
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Photos - Pin {pin_id}: {self.pin.get('name', 'Unnamed Pin')}")
+        dialog.setModal(True)
+        dialog.resize(800, 600)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Header
+        header_label = QLabel(f"Pin {pin_id} Photos ({len(pin_photos)} photos)")
+        header_label.setStyleSheet("font-size: 16px; font-weight: bold; margin: 10px;")
+        layout.addWidget(header_label)
+        
+        # Scroll area for photos
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        
+        photos_widget = QWidget()
+        photos_layout = QVBoxLayout(photos_widget)
+        
+        # Add photo thumbnails
+        from Project.Photos.Photo_finding import PhotoThumbnail
+        photos_per_row = 4
+        row_layout = None
+        
+        for i, photo in enumerate(pin_photos):
+            if i % photos_per_row == 0:
+                row_layout = QHBoxLayout()
+                photos_layout.addLayout(row_layout)
+            
+            thumbnail = PhotoThumbnail(photo)
+            thumbnail.photo_clicked.connect(lambda photo_info: PhotoDetailDialog(photo_info, dialog).exec())
+            row_layout.addWidget(thumbnail)
+        
+        # Fill remaining spaces in last row
+        if row_layout and len(pin_photos) % photos_per_row != 0:
+            remaining = photos_per_row - (len(pin_photos) % photos_per_row)
+            for _ in range(remaining):
+                row_layout.addStretch()
+        
+        scroll_area.setWidget(photos_widget)
+        layout.addWidget(scroll_area)
+        
+        dialog.exec()
+
     def wheelEvent(self, event):
         # Zoom in/out with Ctrl+scroll or just scroll wheel
         if hasattr(event, 'angleDelta'):

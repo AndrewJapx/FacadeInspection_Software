@@ -1,0 +1,92 @@
+{
+  "statuses": {
+    "Unsafe": {
+      "color": "#d32f2f",
+      "description": "Immediate safety concern requiring urgent attention"
+    },
+    "Pre-con": {
+      "color": "#1976d2",
+      "description": "Pre-construction phase item"
+    },
+    "Require Repair": {
+      "color": "#ffe082",
+      "description": "Needs repair but not urgent"
+    },
+    "Completed Before Last Week": {
+      "color": "#ef5350",
+      "description": "Work completed before last week"
+    },
+    "For Verification": {
+      "color": "#ff9800",
+      "description": "Requires verification of completion"
+    },
+    "Completed Last Week": {
+      "color": "#43a047",
+      "description": "Work completed within the last week"
+    },
+    "Verified": {
+      "color": "#81d4fa",
+      "description": "Work completed and verified"
+    },
+    "Sed": {
+      "color": "#55557f",
+      "description": ""
+    }
+  },
+  "materials": {
+    "Stone": {
+      "defects": [
+        "aaa",
+        "crack",
+        "cracks",
+        "Silon",
+        "High or low",
+        "dd",
+        "ddd"
+      ],
+      "description": "Natural stone materials including granite, limestone, marble, etc."
+    },
+    "Window": {
+      "defects": [
+        "Broken Glass",
+        "Seal Failure",
+        "Frame Corrosion",
+        "Air/Water Leak",
+        "Other Window Defect",
+        "pp"
+      ],
+      "description": "Window systems including frames, glass, and sealing components"
+    },
+    "Metal Panel": {
+      "defects": [
+        "Corrosion",
+        "Loose Panel",
+        "Denting",
+        "Other Metal Defect"
+      ],
+      "description": "Metal cladding panels and related components"
+    },
+    "Sealant": {
+      "defects": [
+        "Cracking",
+        "Loss of Adhesion",
+        "Loss of Cohesion",
+        "Other Sealant Defect"
+      ],
+      "description": "Sealant materials used for weatherproofing"
+    },
+    "Other": {
+      "defects": [
+        "General Defect",
+        "Observation",
+        "Info",
+        "Other"
+      ],
+      "description": "Other materials or general observations"
+    },
+    "adw": {
+      "defects": [],
+      "description": ""
+    }
+  }
+}

@@ -70,10 +70,30 @@ def add_finding_from_pin(pin):
     Fields not present in pin will default to empty or None.
     Status will be validated against STATUS_OPTIONS.
     Elevation will be traced from pin if present, else empty string.
+    Checks for existing findings to prevent duplicates based on pin_id.
     """
+    # Check if finding already exists for this pin_id
+    pin_id = pin.get("pin_id")
+    if pin_id:
+        for existing_finding in master_findings:
+            if existing_finding.get("pin_id") == pin_id:
+                # Update existing finding instead of creating duplicate
+                existing_finding.update({
+                    "title": pin.get("name", existing_finding.get("title", "Untitled Finding")),
+                    "status": pin.get("status", existing_finding.get("status")),
+                    "material": pin.get("material", existing_finding.get("material", "")),
+                    "defect": pin.get("defect", existing_finding.get("defect", "")),
+                    "elevation": pin.get("elevation", existing_finding.get("elevation", "")),
+                })
+                print(f"[INFO] Updated existing finding {existing_finding['id']} for pin {pin_id}")
+                return existing_finding
+    
+    # Validate status
     status = pin.get("status", STATUS_OPTIONS[0])
     if status not in STATUS_OPTIONS:
         status = STATUS_OPTIONS[0]
+    
+    # Create new finding
     new_finding = {
         "id": max([f["id"] for f in master_findings], default=0) + 1,
         "title": pin.get("name", "Untitled Finding"),
@@ -88,8 +108,10 @@ def add_finding_from_pin(pin):
         "material": pin.get("material", ""),
         "defect": pin.get("defect", ""),
         "elevation": pin.get("elevation", ""),
+        "pin_id": pin_id,  # Store pin_id for tracking
     }
     master_findings.append(new_finding)
+    print(f"[INFO] Created new finding {new_finding['id']} for pin {pin_id}")
     return new_finding
 
 # Example usage:
@@ -125,22 +147,38 @@ def save_master_findings():
 def upload_master_findings_to_s3(bucket_name="facade-inspection", object_name="master_findings.json"):
     """
     Uploads master_findings.json to S3 bucket (LocalStack or AWS).
-    Assumes LocalStack is running at endpoint_url=http://localhost:4566.
+    Uses the new AWS integration module for better configuration management.
     """
-    s3 = boto3.client(
-        "s3",
-        endpoint_url="http://localhost:4566",  # Change to AWS endpoint for production
-        aws_access_key_id="test",
-        aws_secret_access_key="test",
-        region_name="us-east-1"
-    )
-    # Ensure bucket exists
     try:
-        s3.head_bucket(Bucket=bucket_name)
-    except Exception:
-        s3.create_bucket(Bucket=bucket_name)
-    # Upload file
-    s3.upload_file(MASTER_FINDINGS_PATH, bucket_name, object_name)
+        aws_manager = get_aws_manager()
+        if aws_manager is None:
+            print("[WARNING] AWS integration not available, skipping S3 upload")
+            return False
+        
+        # Upload using AWS manager
+        success = aws_manager.upload_file(MASTER_FINDINGS_PATH, object_name)
+        if success:
+            print(f"[INFO] Successfully uploaded master_findings.json via AWS integration")
+        else:
+            print(f"[ERROR] Failed to upload master_findings.json via AWS integration")
+        
+        return success
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to upload to S3: {e}")
+        return False
+
+def get_aws_manager():
+    """Get AWS manager instance with proper configuration"""
+    try:
+        # Import here to avoid circular imports
+        import sys
+        sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+        from aws_integration import aws_manager
+        return aws_manager
+    except ImportError as e:
+        print(f"[WARNING] AWS integration not available: {e}")
+        return None
 
 def load_master_findings():
     """

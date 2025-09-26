@@ -19,6 +19,7 @@ from Project.Elevations.elevation_card import ElevationCard
 from Project.Findings.findings_widget import FindingsWidget
 from Project.Elevations.elevation_add_dialog import ElevationAddDialog
 from Project.Elevations.elevation_overview import ElevationOverviewWidget
+from Project.Photos.Photo_finding import PhotoGalleryWidget
 from functools import partial
 
 class AddElevationCard(QWidget):
@@ -111,8 +112,14 @@ class ProjectPage(QWidget):
         main_layout.addLayout(content_row, 1)
         print("[ProjectPage] content_row created")
 
-        # Sidebar
-        self.sidebar = SidebarNav()
+        # Sidebar - pass project name for findings list
+        project_name = None
+        if 'folder' in self.project_data and self.project_data['folder']:
+            project_name = os.path.basename(self.project_data['folder'])
+        elif 'name' in self.project_data:
+            project_name = self.project_data['name']
+        
+        self.sidebar = SidebarNav(project_name=project_name)
         self.sidebar.setFixedWidth(240)
         self.sidebar.setStyleSheet(SIDEBAR_STYLE)
         sidebar_container = QVBoxLayout()
@@ -190,10 +197,17 @@ class ProjectPage(QWidget):
         print("[ProjectPage] elevation grid created")
 
         # Scaffold other section widgets
-        self.findings_widget = FindingsWidget()
+        # Get project name for findings widget
+        project_name = None
+        if 'folder' in self.project_data and self.project_data['folder']:
+            project_name = os.path.basename(self.project_data['folder'])
+        elif 'name' in self.project_data:
+            project_name = self.project_data['name']
+        
+        self.findings_widget = FindingsWidget(project_name=project_name)
         self.stacked_content.addWidget(self.findings_widget)  # index 1
 
-        self.photos_widget = QLabel("Photos Section (Coming Soon)")
+        self.photos_widget = PhotoGalleryWidget(project_name=project_name)
         self.stacked_content.addWidget(self.photos_widget)  # index 2
 
         self.drops_widget = QLabel("Drops Section (Coming Soon)")
@@ -278,6 +292,18 @@ class ProjectPage(QWidget):
         }
         idx = section_map.get(section_name, 0)
         self.stacked_content.setCurrentIndex(idx)
+        
+        # If switching to findings, refresh the findings widget to show latest data
+        if section_name == "Findings":
+            # Get project name
+            project_name = None
+            if 'folder' in self.project_data and self.project_data['folder']:
+                project_name = os.path.basename(self.project_data['folder'])
+            elif 'name' in self.project_data:
+                project_name = self.project_data['name']
+            
+            if project_name:
+                self.findings_widget.refresh(project_name)
 
     def populate_elevation_grid(self):
         # Clear previous

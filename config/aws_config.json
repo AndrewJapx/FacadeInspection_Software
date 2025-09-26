@@ -1,0 +1,34 @@
+{
+  "_comment": "AWS Configuration for Facade Inspection Software",
+  "_environments": {
+    "development": "Uses LocalStack running on localhost:4566",
+    "staging": "Uses AWS with development credentials",
+    "production": "Uses AWS with production credentials"
+  },
+  
+  "current_environment": "development",
+  
+  "development": {
+    "endpoint_url": "http://localhost:4566",
+    "aws_access_key_id": "test",
+    "aws_secret_access_key": "test",
+    "region_name": "us-east-1",
+    "bucket_name": "facade-inspection-dev"
+  },
+  
+  "staging": {
+    "endpoint_url": null,
+    "aws_access_key_id": "YOUR_STAGING_ACCESS_KEY",
+    "aws_secret_access_key": "YOUR_STAGING_SECRET_KEY",
+    "region_name": "us-east-1",
+    "bucket_name": "facade-inspection-staging"
+  },
+  
+  "production": {
+    "endpoint_url": null,
+    "aws_access_key_id": "YOUR_PRODUCTION_ACCESS_KEY",
+    "aws_secret_access_key": "YOUR_PRODUCTION_SECRET_KEY",
+    "region_name": "us-east-1",
+    "bucket_name": "facade-inspection-prod"
+  }
+}
