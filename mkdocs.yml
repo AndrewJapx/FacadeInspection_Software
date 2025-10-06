@@ -1,0 +1,92 @@
+site_name: Facade Inspection Software Documentation
+site_url: https://AndrewJapx.github.io/FacadeInspection_Software/
+site_author: AndrewJapx
+site_description: >-
+  Comprehensive documentation for the Facade Inspection Software,
+  a tool for managing building facade inspections and findings.
+
+repo_name: AndrewJapx/FacadeInspection_Software
+repo_url: https://github.com/AndrewJapx/FacadeInspection_Software
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.share
+    - toc.follow
+    - content.code.copy
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quick-start.md
+    - Configuration: getting-started/configuration.md
+  - User Guide:
+    - Overview: user-guide/overview.md
+    - Project Management: user-guide/project-management.md
+    - Elevations: user-guide/elevations.md
+    - Findings: user-guide/findings.md
+    - Photos: user-guide/photos.md
+    - Templates: user-guide/templates.md
+  - API Reference:
+    - Core Modules: api/core.md
+    - Project API: api/project.md
+    - Elevations API: api/elevations.md
+    - Findings API: api/findings.md
+    - AWS Integration: api/aws.md
+  - Development:
+    - Architecture: development/architecture.md
+    - Contributing: development/contributing.md
+    - Testing: development/testing.md
+  - About: about.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: sphinx
+            show_source: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/AndrewJapx/FacadeInspection_Software
